@@ -41,12 +41,8 @@ export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
 			signal: controller.signal,
 		});
 
-		const contentLength = response.headers.get("content-length");
-		if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_SIZE_BYTES) {
-			throw new Error("Response too large (exceeds 5MB limit)");
-		}
-
 		if (!response.ok && response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
+			await cancelBody(response);
 			const retry = await fetch(options.url, {
 				headers: buildHeaders(options.format, "pi-webfetch"),
 				signal: controller.signal,
@@ -99,6 +95,7 @@ function buildHeaders(format: WebfetchFormat, userAgent: string): HeadersInit {
 }
 
 async function readFetchResponse(url: string, response: Response, signal: AbortSignal): Promise<FetchResult> {
+	await rejectOversizedContentLength(response);
 	const body = await readResponseBody(response, signal);
 	return {
 		url: response.url || url,
@@ -111,6 +108,22 @@ async function readFetchResponse(url: string, response: Response, signal: AbortS
 	};
 }
 
+async function rejectOversizedContentLength(response: Response): Promise<void> {
+	const contentLength = response.headers.get("content-length");
+	if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_SIZE_BYTES) {
+		await cancelBody(response);
+		throw new Error("Response too large (exceeds 5MB limit)");
+	}
+}
+
+async function cancelBody(response: Response): Promise<void> {
+	try {
+		await response.body?.cancel();
+	} catch {
+		// Preserve the caller's original failure.
+	}
+}
+
 async function readResponseBody(response: Response, signal: AbortSignal): Promise<Uint8Array> {
 	if (!response.body) return new Uint8Array();
 
@@ -120,12 +133,16 @@ async function readResponseBody(response: Response, signal: AbortSignal): Promis
 
 	try {
 		while (true) {
-			if (signal.aborted) throw new Error("Request aborted");
+			if (signal.aborted) {
+				await cancelReader(reader);
+				throw new Error("Request aborted");
+			}
 			const read = await reader.read();
 			if (read.done) break;
 			chunks.push(read.value);
 			total += read.value.length;
 			if (total > MAX_RESPONSE_SIZE_BYTES) {
+				await cancelReader(reader);
 				throw new Error("Response too large (exceeds 5MB limit)");
 			}
 		}
@@ -140,6 +157,14 @@ async function readResponseBody(response: Response, signal: AbortSignal): Promis
 		offset += chunk.length;
 	}
 	return body;
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+	try {
+		await reader.cancel();
+	} catch {
+		// Preserve the caller's original failure.
+	}
 }
 
 function forwardAbort(signal: AbortSignal | undefined, controller: AbortController): () => void {
