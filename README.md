@@ -87,6 +87,12 @@ The test suite uses vitest. Test descriptions follow `#given .. #when .. #then` 
 
 [MIT](LICENSE).
 
+## Related
+
+- [senpi](https://github.com/code-yeongyu/senpi) — the fork/runtime these extensions are extracted from.
+- [Ultraworkers Discord](https://discord.gg/PUwSMR9XNk) — community link from the senpi README.
+- [Dori](https://sisyphuslabs.ai) — the product powered by senpi under the hood.
+
 ## Acknowledgements
 
 - **Mario Zechner** ([@badlogic](https://github.com/badlogic)) — author of [pi-mono](https://github.com/badlogic/pi-mono) and the pi-coding-agent extension API this package targets.
