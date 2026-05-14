@@ -74,7 +74,7 @@ describe("webfetch extension toggle", () => {
 		);
 
 		// then
-		expect(setStatus).toHaveBeenCalledWith("pi-webfetch", "WebFetch ready");
+		expect(setStatus).toHaveBeenCalledWith("pi-webfetch", undefined);
 		expect(setWidget).toHaveBeenCalledWith(
 			"pi-webfetch",
 			["Web Fetch ready", "formats: markdown/text/html · timeout <=120s · response cap 5MB"],

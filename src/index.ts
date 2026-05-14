@@ -38,7 +38,7 @@ export function isWebfetchEnabled(): boolean {
 
 function updateUi(ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return;
-	ctx.ui.setStatus(STATUS_KEY, "WebFetch ready");
+	ctx.ui.setStatus(STATUS_KEY, undefined);
 	ctx.ui.setWidget(WIDGET_KEY, WIDGET_LINES, { placement: "belowEditor" });
 }
 
