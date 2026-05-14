@@ -44,7 +44,7 @@ describe("webfetch extension toggle", () => {
 		expect(registerTool).toHaveBeenCalledTimes(1);
 	});
 
-	it("#given interactive session #when webfetch starts #then shows bounded fetch capability widget", async () => {
+	it("#given interactive session #when webfetch starts #then clears startup widget", async () => {
 		// given
 		delete process.env[ENABLE_ENV];
 		const registerTool = vi.fn();
@@ -75,10 +75,6 @@ describe("webfetch extension toggle", () => {
 
 		// then
 		expect(setStatus).toHaveBeenCalledWith("pi-webfetch", undefined);
-		expect(setWidget).toHaveBeenCalledWith(
-			"pi-webfetch",
-			["Web Fetch ready", "formats: markdown/text/html · timeout <=120s · response cap 5MB"],
-			{ placement: "belowEditor" },
-		);
+		expect(setWidget).toHaveBeenCalledWith("pi-webfetch", undefined);
 	});
 });

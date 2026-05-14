@@ -3,15 +3,9 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/renderers.js";
 import { type WebfetchRenderDetails, webfetch } from "./webfetch/tool.js";
 
-interface ResultLike<TDetails> {
-	content: ReadonlyArray<{ type: string; text?: string }>;
-	details?: TDetails;
-}
-
 const ENABLE_ENV = "PI_WEBFETCH";
 const STATUS_KEY = "pi-webfetch";
 const WIDGET_KEY = "pi-webfetch";
-const WIDGET_LINES = ["Web Fetch ready", "formats: markdown/text/html · timeout <=120s · response cap 5MB"];
 
 function parseEnableEnv(envVar: string): boolean {
 	const envValue = process.env[envVar];
@@ -36,12 +30,6 @@ export function isWebfetchEnabled(): boolean {
 	return parseEnableEnv(ENABLE_ENV);
 }
 
-function updateUi(ctx: ExtensionContext): void {
-	if (!ctx.hasUI) return;
-	ctx.ui.setStatus(STATUS_KEY, undefined);
-	ctx.ui.setWidget(WIDGET_KEY, WIDGET_LINES, { placement: "belowEditor" });
-}
-
 function clearUi(ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return;
 	ctx.ui.setStatus(STATUS_KEY, undefined);
@@ -60,15 +48,14 @@ export default function (pi: ExtensionAPI): void {
 		return;
 	}
 
-	pi.registerTool({
+	pi.registerTool<typeof webfetch.parameters, WebfetchRenderDetails>({
 		...webfetch,
-		renderCall: (args, theme) => renderWebfetchCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderWebfetchResult(result as ResultLike<WebfetchRenderDetails>, options, theme),
+		renderCall: renderWebfetchCall,
+		renderResult: renderWebfetchResult,
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		updateUi(ctx);
+		clearUi(ctx);
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
