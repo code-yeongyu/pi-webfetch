@@ -40,7 +40,45 @@ describe("webfetch extension toggle", () => {
 	it("registers the webfetch tool when PI_WEBFETCH is unset", () => {
 		delete process.env[ENABLE_ENV];
 		const registerTool = vi.fn();
-		webfetchExtension({ registerTool } as never);
+		webfetchExtension({ registerTool, on: vi.fn() } as never);
 		expect(registerTool).toHaveBeenCalledTimes(1);
+	});
+
+	it("#given interactive session #when webfetch starts #then shows bounded fetch capability widget", async () => {
+		// given
+		delete process.env[ENABLE_ENV];
+		const registerTool = vi.fn();
+		let sessionStart: ((event: object, ctx: object) => Promise<void> | void) | undefined;
+		const setWidget = vi.fn();
+		const setStatus = vi.fn();
+
+		// when
+		webfetchExtension({
+			registerTool,
+			on(eventName: string, handler: unknown) {
+				if (eventName === "session_start") {
+					sessionStart = handler as typeof sessionStart;
+				}
+			},
+		} as never);
+		await sessionStart?.(
+			{},
+			{
+				hasUI: true,
+				ui: {
+					setWidget,
+					setStatus,
+					theme: { fg: (_key: string, value: string) => value },
+				},
+			},
+		);
+
+		// then
+		expect(setStatus).toHaveBeenCalledWith("pi-webfetch", "WebFetch ready");
+		expect(setWidget).toHaveBeenCalledWith(
+			"pi-webfetch",
+			["Web Fetch ready", "formats: markdown/text/html · timeout <=120s · response cap 5MB"],
+			{ placement: "belowEditor" },
+		);
 	});
 });

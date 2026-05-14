@@ -57,6 +57,36 @@ async function waitUntil(assertion: () => void): Promise<void> {
 }
 
 describe("webfetch", () => {
+	it("#given url fetch #when execution starts #then emits progress details for the TUI", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/plain" });
+			response.end("ready");
+		});
+		const updates: Array<{ content: Array<{ type: string; text?: string }>; details?: unknown }> = [];
+
+		// when
+		const result = await webfetch.execute(
+			"tool",
+			{ url: `${server.baseUrl}/ready`, format: "text", timeout: 7 },
+			undefined,
+			(update) => updates.push(update),
+			undefined as never,
+		);
+
+		// then
+		expect(textContent(result)).toBe("ready");
+		expect(updates[0]).toMatchObject({
+			content: [{ type: "text", text: `Fetching ${server.baseUrl}/ready as text (timeout 7s)` }],
+			details: {
+				phase: "fetching",
+				url: `${server.baseUrl}/ready`,
+				format: "text",
+				timeoutSeconds: 7,
+			},
+		});
+	});
+
 	it("#given html page #when fetching markdown #then returns converted markdown", async () => {
 		// given
 		const server = await createFixtureServer((_request, response) => {

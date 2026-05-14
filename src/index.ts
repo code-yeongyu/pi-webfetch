@@ -1,7 +1,7 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/renderers.js";
-import { type WebfetchDetails, webfetch } from "./webfetch/tool.js";
+import { type WebfetchRenderDetails, webfetch } from "./webfetch/tool.js";
 
 interface ResultLike<TDetails> {
 	content: ReadonlyArray<{ type: string; text?: string }>;
@@ -9,6 +9,9 @@ interface ResultLike<TDetails> {
 }
 
 const ENABLE_ENV = "PI_WEBFETCH";
+const STATUS_KEY = "pi-webfetch";
+const WIDGET_KEY = "pi-webfetch";
+const WIDGET_LINES = ["Web Fetch ready", "formats: markdown/text/html · timeout <=120s · response cap 5MB"];
 
 function parseEnableEnv(envVar: string): boolean {
 	const envValue = process.env[envVar];
@@ -33,6 +36,18 @@ export function isWebfetchEnabled(): boolean {
 	return parseEnableEnv(ENABLE_ENV);
 }
 
+function updateUi(ctx: ExtensionContext): void {
+	if (!ctx.hasUI) return;
+	ctx.ui.setStatus(STATUS_KEY, "WebFetch ready");
+	ctx.ui.setWidget(WIDGET_KEY, WIDGET_LINES, { placement: "belowEditor" });
+}
+
+function clearUi(ctx: ExtensionContext): void {
+	if (!ctx.hasUI) return;
+	ctx.ui.setStatus(STATUS_KEY, undefined);
+	ctx.ui.setWidget(WIDGET_KEY, undefined);
+}
+
 /**
  * pi-webfetch — URL retrieval for the pi coding agent.
  *
@@ -49,6 +64,14 @@ export default function (pi: ExtensionAPI): void {
 		...webfetch,
 		renderCall: (args, theme) => renderWebfetchCall(args as never, theme),
 		renderResult: (result, options, theme) =>
-			renderWebfetchResult(result as ResultLike<WebfetchDetails>, options, theme),
+			renderWebfetchResult(result as ResultLike<WebfetchRenderDetails>, options, theme),
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		updateUi(ctx);
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		clearUi(ctx);
 	});
 }

@@ -28,7 +28,16 @@ export interface WebfetchDetails {
 	truncated: boolean;
 }
 
-export const webfetch = defineTool({
+export interface WebfetchProgressDetails {
+	phase: "fetching";
+	url: string;
+	format: WebfetchFormat;
+	timeoutSeconds: number;
+}
+
+export type WebfetchRenderDetails = WebfetchDetails | WebfetchProgressDetails;
+
+export const webfetch = defineTool<typeof Params, WebfetchRenderDetails>({
 	name: "webfetch",
 	label: "Web Fetch",
 	description:
@@ -41,9 +50,14 @@ export const webfetch = defineTool({
 		"The tool is read-only and does not modify files.",
 	],
 	parameters: Params,
-	async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+	async execute(_toolCallId, params, signal, onUpdate, _ctx) {
 		const format = (params.format ?? "markdown") as WebfetchFormat;
 		const timeoutSeconds = clampTimeout(params.timeout);
+		onUpdate?.({
+			content: [{ type: "text", text: `Fetching ${params.url} as ${format} (timeout ${timeoutSeconds}s)` }],
+			details: { phase: "fetching", url: params.url, format, timeoutSeconds },
+		});
+
 		const fetched = await fetchUrl({ url: params.url, format, timeoutSeconds, signal });
 		const raw = new TextDecoder().decode(fetched.body);
 		const contentType = fetched.contentType.toLowerCase();

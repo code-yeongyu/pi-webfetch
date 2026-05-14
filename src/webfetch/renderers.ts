@@ -1,7 +1,7 @@
 import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";
 import { Text, truncateToWidth } from "@mariozechner/pi-tui";
 
-import type { WebfetchDetails } from "./tool.js";
+import type { WebfetchProgressDetails, WebfetchRenderDetails } from "./tool.js";
 
 const URL_BUDGET = 92;
 const PREVIEW_LINES = 4;
@@ -27,15 +27,30 @@ export function renderWebfetchCall(args: WebfetchArgs, theme: Theme): Text {
 }
 
 export function renderWebfetchResult(
-	result: ResultLike<WebfetchDetails>,
+	result: ResultLike<WebfetchRenderDetails>,
 	options: ToolRenderResultOptions,
 	theme: Theme,
 ): Text {
-	if (options.isPartial) return new Text(theme.fg("warning", "Fetching..."), 0, 0);
+	if (options.isPartial) {
+		const details = result.details;
+		if (isWebfetchProgressDetails(details)) {
+			return new Text(
+				theme.fg(
+					"warning",
+					`Fetching ${shorten(details.url, URL_BUDGET)} as ${details.format} (${details.timeoutSeconds}s)`,
+				),
+				0,
+				0,
+			);
+		}
+		return new Text(theme.fg("warning", "Fetching..."), 0, 0);
+	}
 
 	const details = result.details;
 	const text = result.content.find((block) => block.type === "text")?.text ?? "";
-	if (!details) return new Text(theme.fg("muted", truncateToWidth(text, PREVIEW_WIDTH)), 0, 0);
+	if (!details || isWebfetchProgressDetails(details)) {
+		return new Text(theme.fg("muted", truncateToWidth(text, PREVIEW_WIDTH)), 0, 0);
+	}
 
 	const statusKey = details.status >= 200 && details.status < 300 ? "success" : "warning";
 	const status = theme.fg(statusKey, `${details.status} ${details.statusText || "OK"}`);
@@ -60,6 +75,10 @@ export function renderWebfetchResult(
 			.map((line) => theme.fg("toolOutput", truncateToWidth(line, PREVIEW_WIDTH))),
 	];
 	return new Text(lines.join("\n"), 0, 0);
+}
+
+function isWebfetchProgressDetails(details: WebfetchRenderDetails | undefined): details is WebfetchProgressDetails {
+	return details !== undefined && "phase" in details && details.phase === "fetching";
 }
 
 function previewText(text: string, theme: Theme): string[] {
