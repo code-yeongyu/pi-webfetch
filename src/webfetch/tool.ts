@@ -5,6 +5,8 @@ import { Type } from "typebox";
 import { htmlToMarkdown, htmlToText } from "./content.js";
 import { clampTimeout, fetchUrl, type WebfetchFormat } from "./fetcher.js";
 
+const WEBFETCH_FORMATS = ["markdown", "text", "html"] as const;
+
 const Params = Type.Object({
 	url: Type.String({ description: "The URL to fetch content from" }),
 	format: Type.Optional(
@@ -51,7 +53,7 @@ export const webfetch = defineTool<typeof Params, WebfetchRenderDetails>({
 	],
 	parameters: Params,
 	async execute(_toolCallId, params, signal, onUpdate, _ctx) {
-		const format = (params.format ?? "markdown") as WebfetchFormat;
+		const format = parseWebfetchFormat(params.format);
 		const timeoutSeconds = clampTimeout(params.timeout);
 		onUpdate?.({
 			content: [{ type: "text", text: `Fetching ${params.url} as ${format} (timeout ${timeoutSeconds}s)` }],
@@ -92,3 +94,11 @@ export const webfetch = defineTool<typeof Params, WebfetchRenderDetails>({
 		};
 	},
 });
+
+export function parseWebfetchFormat(value: unknown): WebfetchFormat {
+	if (value === undefined) return "markdown";
+	for (const format of WEBFETCH_FORMATS) {
+		if (value === format) return format;
+	}
+	return "markdown";
+}

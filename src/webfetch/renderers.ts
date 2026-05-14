@@ -1,7 +1,7 @@
 import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";
 import { Text, truncateToWidth } from "@mariozechner/pi-tui";
 
-import type { WebfetchProgressDetails, WebfetchRenderDetails } from "./tool.js";
+import type { WebfetchDetails, WebfetchProgressDetails, WebfetchRenderDetails } from "./tool.js";
 
 const URL_BUDGET = 92;
 const PREVIEW_LINES = 4;
@@ -18,11 +18,12 @@ interface ResultLike<TDetails> {
 	details?: TDetails;
 }
 
-export function renderWebfetchCall(args: WebfetchArgs, theme: Theme): Text {
+export function renderWebfetchCall(args: unknown, theme: Theme): Text {
+	const webfetchArgs = parseWebfetchArgs(args);
 	const head = theme.fg("toolTitle", theme.bold("webfetch "));
-	const url = theme.fg("accent", shorten(args.url, URL_BUDGET));
-	const format = theme.fg("muted", ` [${args.format ?? "markdown"}]`);
-	const timeout = args.timeout === undefined ? "" : theme.fg("dim", ` ${args.timeout}s`);
+	const url = theme.fg("accent", shorten(webfetchArgs.url, URL_BUDGET));
+	const format = theme.fg("muted", ` [${webfetchArgs.format ?? "markdown"}]`);
+	const timeout = webfetchArgs.timeout === undefined ? "" : theme.fg("dim", ` ${webfetchArgs.timeout}s`);
 	return new Text(head + url + format + timeout, 0, 0);
 }
 
@@ -48,7 +49,7 @@ export function renderWebfetchResult(
 
 	const details = result.details;
 	const text = result.content.find((block) => block.type === "text")?.text ?? "";
-	if (!details || isWebfetchProgressDetails(details)) {
+	if (!isWebfetchDetails(details)) {
 		return new Text(theme.fg("muted", truncateToWidth(text, PREVIEW_WIDTH)), 0, 0);
 	}
 
@@ -69,24 +70,60 @@ export function renderWebfetchResult(
 		theme.fg("dim", `URL: ${shorten(details.finalUrl, URL_BUDGET)}`),
 		theme.fg("dim", `Content-Type: ${details.contentType || "unknown"}`),
 		"",
-		...text
-			.split("\n")
-			.slice(0, 24)
-			.map((line) => theme.fg("toolOutput", truncateToWidth(line, PREVIEW_WIDTH))),
+		...collectLines(text, 24).map((line) => theme.fg("toolOutput", truncateToWidth(line, PREVIEW_WIDTH))),
 	];
 	return new Text(lines.join("\n"), 0, 0);
 }
 
-function isWebfetchProgressDetails(details: WebfetchRenderDetails | undefined): details is WebfetchProgressDetails {
-	return details !== undefined && "phase" in details && details.phase === "fetching";
+function collectLines(text: string, limit: number): string[] {
+	const lines: string[] = [];
+	let start = 0;
+	while (lines.length < limit && start <= text.length) {
+		const newlineIndex = text.indexOf("\n", start);
+		if (newlineIndex === -1) {
+			lines.push(text.slice(start));
+			break;
+		}
+		lines.push(text.slice(start, newlineIndex));
+		start = newlineIndex + 1;
+	}
+	return lines;
+}
+
+function collectNonEmptyTrimmedLines(text: string, limit: number): string[] {
+	const lines: string[] = [];
+	let start = 0;
+	while (lines.length < limit && start <= text.length) {
+		const newlineIndex = text.indexOf("\n", start);
+		const line = (newlineIndex === -1 ? text.slice(start) : text.slice(start, newlineIndex)).trim();
+		if (line.length > 0) lines.push(line);
+		if (newlineIndex === -1) break;
+		start = newlineIndex + 1;
+	}
+	return lines;
+}
+
+function parseWebfetchArgs(args: unknown): WebfetchArgs {
+	if (typeof args !== "object" || args === null) {
+		return { url: "" };
+	}
+	return {
+		url: "url" in args && typeof args.url === "string" ? args.url : "",
+		format: "format" in args && typeof args.format === "string" ? args.format : undefined,
+		timeout: "timeout" in args && typeof args.timeout === "number" ? args.timeout : undefined,
+	};
+}
+
+function isWebfetchProgressDetails(details: WebfetchRenderDetails | unknown): details is WebfetchProgressDetails {
+	return typeof details === "object" && details !== null && "phase" in details && details.phase === "fetching";
+}
+
+function isWebfetchDetails(details: WebfetchRenderDetails | unknown): details is WebfetchDetails {
+	return typeof details === "object" && details !== null && "status" in details && typeof details.status === "number";
 }
 
 function previewText(text: string, theme: Theme): string[] {
-	const lines = text
-		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0)
-		.slice(0, PREVIEW_LINES);
+	const lines = collectNonEmptyTrimmedLines(text, PREVIEW_LINES);
 	if (lines.length === 0) return [theme.fg("dim", "  empty response")];
 	return lines.map((line) => theme.fg("toolOutput", `  ${truncateToWidth(line, PREVIEW_WIDTH)}`));
 }

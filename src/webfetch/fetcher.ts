@@ -1,3 +1,10 @@
+import {
+	InvalidWebfetchUrlError,
+	WebfetchAbortError,
+	WebfetchResponseTooLargeError,
+	WebfetchTimeoutError,
+} from "./errors.js";
+
 export const MAX_RESPONSE_SIZE_BYTES = 5 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_SECONDS = 30;
 export const MAX_TIMEOUT_SECONDS = 120;
@@ -30,7 +37,7 @@ export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
 	const timeoutSeconds = clampTimeout(options.timeoutSeconds);
 	const controller = new AbortController();
 	const timeout = setTimeout(
-		() => controller.abort(new Error(`Request timed out after ${timeoutSeconds}s`)),
+		() => controller.abort(new WebfetchTimeoutError(`Request timed out after ${timeoutSeconds}s`)),
 		timeoutSeconds * 1000,
 	);
 	const removeAbortForwarder = forwardAbort(options.signal, controller);
@@ -41,7 +48,7 @@ export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
 			signal: controller.signal,
 		});
 
-		if (!response.ok && response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
+		if (response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
 			await cancelBody(response);
 			const retry = await fetch(options.url, {
 				headers: buildHeaders(options.format, "pi-webfetch"),
@@ -59,13 +66,13 @@ export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
 
 export function validateUrl(url: string): void {
 	if (!url.startsWith("http://") && !url.startsWith("https://")) {
-		throw new Error("URL must start with http:// or https://");
+		throw new InvalidWebfetchUrlError("URL must start with http:// or https://");
 	}
 
 	try {
 		new URL(url);
 	} catch {
-		throw new Error(`Invalid URL: ${url}`);
+		throw new InvalidWebfetchUrlError(`Invalid URL: ${url}`);
 	}
 }
 
@@ -104,7 +111,7 @@ async function readFetchResponse(url: string, response: Response, signal: AbortS
 		contentType: response.headers.get("content-type") ?? "",
 		bytes: body.length,
 		body,
-		truncated: false,
+		truncated: body.length === MAX_RESPONSE_SIZE_BYTES,
 	};
 }
 
@@ -112,7 +119,7 @@ async function rejectOversizedContentLength(response: Response): Promise<void> {
 	const contentLength = response.headers.get("content-length");
 	if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_SIZE_BYTES) {
 		await cancelBody(response);
-		throw new Error("Response too large (exceeds 5MB limit)");
+		throw new WebfetchResponseTooLargeError("Response too large (exceeds 5MB limit)");
 	}
 }
 
@@ -135,7 +142,7 @@ async function readResponseBody(response: Response, signal: AbortSignal): Promis
 		while (true) {
 			if (signal.aborted) {
 				await cancelReader(reader);
-				throw new Error("Request aborted");
+				throw new WebfetchAbortError("Request aborted");
 			}
 			const read = await reader.read();
 			if (read.done) break;
@@ -143,7 +150,7 @@ async function readResponseBody(response: Response, signal: AbortSignal): Promis
 			total += read.value.length;
 			if (total > MAX_RESPONSE_SIZE_BYTES) {
 				await cancelReader(reader);
-				throw new Error("Response too large (exceeds 5MB limit)");
+				throw new WebfetchResponseTooLargeError("Response too large (exceeds 5MB limit)");
 			}
 		}
 	} finally {

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Static } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { MAX_RESPONSE_SIZE_BYTES } from "../src/webfetch/fetcher.js";
 import { webfetch } from "../src/webfetch/tool.js";
 
 type RouteHandler = (request: IncomingMessage, response: ServerResponse) => void;
@@ -184,6 +185,22 @@ describe("webfetch", () => {
 			"Response too large (exceeds 5MB limit)",
 		);
 		await waitUntil(() => expect(connectionClosed).toBe(true));
+	});
+
+	it("#given response at byte limit #when fetching #then marks result as truncated", async () => {
+		// given
+		const body = Buffer.alloc(MAX_RESPONSE_SIZE_BYTES, "x");
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-length": String(body.length), "content-type": "text/plain" });
+			response.end(body);
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/limit`, format: "text" });
+
+		// then
+		expect(result.details?.bytes).toBe(MAX_RESPONSE_SIZE_BYTES);
+		expect(result.details?.truncated).toBe(true);
 	});
 
 	it("#given Cloudflare challenge #when retrying #then closes the challenged response", async () => {
