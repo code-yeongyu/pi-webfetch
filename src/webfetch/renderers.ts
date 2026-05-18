@@ -107,11 +107,12 @@ function parseWebfetchArgs(args: unknown): WebfetchArgs {
 	if (typeof args !== "object" || args === null) {
 		return { url: "" };
 	}
-	return {
+	const webfetchArgs: WebfetchArgs = {
 		url: "url" in args && typeof args.url === "string" ? args.url : "",
-		format: "format" in args && typeof args.format === "string" ? args.format : undefined,
-		timeout: "timeout" in args && typeof args.timeout === "number" ? args.timeout : undefined,
 	};
+	if ("format" in args && typeof args.format === "string") webfetchArgs.format = args.format;
+	if ("timeout" in args && typeof args.timeout === "number") webfetchArgs.timeout = args.timeout;
+	return webfetchArgs;
 }
 
 function isWebfetchProgressDetails(details: WebfetchRenderDetails | unknown): details is WebfetchProgressDetails {

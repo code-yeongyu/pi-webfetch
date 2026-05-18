@@ -60,7 +60,12 @@ export const webfetch = defineTool<typeof Params, WebfetchRenderDetails>({
 			details: { phase: "fetching", url: params.url, format, timeoutSeconds },
 		});
 
-		const fetched = await fetchUrl({ url: params.url, format, timeoutSeconds, signal });
+		const fetched = await fetchUrl({
+			url: params.url,
+			format,
+			timeoutSeconds,
+			...(signal === undefined ? {} : { signal }),
+		});
 		const raw = new TextDecoder().decode(fetched.body);
 		const contentType = fetched.contentType.toLowerCase();
 		const isHtml = contentType.includes("text/html") || contentType.includes("application/xhtml+xml");
