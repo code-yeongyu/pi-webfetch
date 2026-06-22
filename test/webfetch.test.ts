@@ -108,6 +108,50 @@ describe("webfetch", () => {
 		expect(result.details?.status).toBe(200);
 	});
 
+	it("#given article page with chrome #when fetching markdown #then returns reader-style main content", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(`<!doctype html>
+				<html>
+					<head>
+						<title>Browser chrome should not win</title>
+						<meta name="description" content="Promo summary">
+						<style>.ad { color: red; }</style>
+					</head>
+					<body>
+						<header><a href="/subscribe">Subscribe now</a></header>
+						<nav><a href="/topics">Topics</a><a href="/login">Login</a></nav>
+						<main>
+							<article>
+								<h1>Readable Article Title</h1>
+								<p>Alpha opening paragraph with enough words to look like article content, not navigation.</p>
+								<p>Beta paragraph explains the important result and should stay in the fetched content.</p>
+							</article>
+						</main>
+						<aside>Sponsored sidebar offer</aside>
+						<footer>Privacy policy and cookie settings</footer>
+						<script>window.tracker = true;</script>
+					</body>
+				</html>`);
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/article`, format: "markdown" });
+		const text = textContent(result);
+
+		// then
+		expect(text).toContain("# Readable Article Title");
+		expect(text).toContain("Alpha opening paragraph");
+		expect(text).toContain("Beta paragraph explains");
+		expect(text).not.toContain("Browser chrome should not win");
+		expect(text).not.toContain("Subscribe now");
+		expect(text).not.toContain("Topics");
+		expect(text).not.toContain("Sponsored sidebar offer");
+		expect(text).not.toContain("Privacy policy");
+		expect(text).not.toContain("window.tracker");
+	});
+
 	it("#given html page #when fetching text #then returns readable text without tags", async () => {
 		// given
 		const server = await createFixtureServer((_request, response) => {
@@ -122,6 +166,50 @@ describe("webfetch", () => {
 		expect(textContent(result)).toContain("Title");
 		expect(textContent(result)).toContain("One Two");
 		expect(textContent(result)).not.toContain("<h1>");
+		expect(result.details?.format).toBe("text");
+	});
+
+	it("#given article page with chrome #when fetching text #then returns reader-style main content", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(`<!doctype html>
+				<html>
+					<head>
+						<title>Text chrome title</title>
+						<meta name="description" content="Text promo summary">
+					</head>
+					<body>
+						<header>Text subscribe banner</header>
+						<nav><a href="/latest">Latest text link</a></nav>
+						<main>
+							<article>
+								<h1>Readable Text Article</h1>
+								<p>Gamma text paragraph with enough words to be selected as article content.</p>
+								<p>Delta text paragraph should stay after reader cleanup.</p>
+							</article>
+						</main>
+						<aside>Text sponsored sidebar</aside>
+						<footer>Text footer legal links</footer>
+						<script>window.textTracker = true;</script>
+					</body>
+				</html>`);
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/text-article`, format: "text" });
+		const text = textContent(result);
+
+		// then
+		expect(text).toContain("Readable Text Article");
+		expect(text).toContain("Gamma text paragraph");
+		expect(text).toContain("Delta text paragraph");
+		expect(text).not.toContain("Text chrome title");
+		expect(text).not.toContain("Text subscribe banner");
+		expect(text).not.toContain("Latest text link");
+		expect(text).not.toContain("Text sponsored sidebar");
+		expect(text).not.toContain("Text footer legal links");
+		expect(text).not.toContain("textTracker");
 		expect(result.details?.format).toBe("text");
 	});
 

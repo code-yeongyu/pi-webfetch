@@ -38,10 +38,14 @@
 		"typebox": "*"
 	},
 	"dependencies": {
-		"turndown": "^7.2.2"
+		"@mozilla/readability": "0.6.0",
+		"jsdom": "29.1.1",
+		"turndown": "^7.2.2",
+		"undici": "7.28.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.5",
+		"@types/jsdom": "28.0.3",
 		"@types/node": "^22.10.5",
 		"@types/turndown": "^5.0.5",
 		"@typescript/native-preview": "^7.0.0-dev.20260120.1",
@@ -49,6 +53,6 @@
 		"vitest": "^4.1.5"
 	},
 	"engines": {
-		"node": ">=20.0.0"
+		"node": ">=20.19.0"
 	}
 }
