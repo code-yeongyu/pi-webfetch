@@ -169,12 +169,12 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 				};
 				break;
 			}
+			if (explicitArticle) return explicitArticle;
 
 			const article = new Readability(dom.window.document, {
 				charThreshold: 80,
 				keepClasses: false,
 			}).parse();
-			if (explicitArticle) return explicitArticle;
 			if (!article?.content || !article.textContent) return undefined;
 			return {
 				title: normalizePlainText(
