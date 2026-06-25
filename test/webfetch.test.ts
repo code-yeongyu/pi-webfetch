@@ -6,6 +6,7 @@ import { MAX_RESPONSE_SIZE_BYTES } from "../src/webfetch/fetcher.js";
 import { webfetch } from "../src/webfetch/tool.js";
 
 type RouteHandler = (request: IncomingMessage, response: ServerResponse) => void;
+type CapturedHeaders = IncomingMessage["headers"];
 
 const servers: Server[] = [];
 
@@ -34,12 +35,79 @@ function textContent(result: Awaited<ReturnType<typeof executeWebfetch>>): strin
 	return first.text;
 }
 
+function headerValue(headers: CapturedHeaders, name: string): string {
+	const value = headers[name.toLowerCase()];
+	if (Array.isArray(value)) return value.join(", ");
+	return value ?? "";
+}
+
 afterEach(async () => {
 	await Promise.all(servers.splice(0).map(closeServer));
 });
 
 function closeServer(server: Server): Promise<void> {
 	return new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+}
+
+function tistoryFixtureHtml(): string {
+	return `<!doctype html>
+		<html>
+			<head>
+				<title>관리자 메뉴가 제목을 이기면 안 됨</title>
+				<meta name="description" content="티스토리 블로그 홍보 문구">
+			</head>
+			<body class="tt-body-page">
+				<header>
+					<a href="/manage">관리자</a>
+					<a href="/category">분류 전체보기</a>
+				</header>
+				<section class="sidebar">
+					<h2>최근 글</h2>
+					<p>관련 없는 사이드바 설명이 길게 들어가서 리더가 이 영역을 본문으로 착각하면 안 됩니다.</p>
+				</section>
+				<div id="content">
+					<h1 class="tit_post">티스토리 본문을 읽어야 합니다</h1>
+					<div class="entry-content contents_style">
+						<div class="article_view tt_article_useless_p_margin">
+							<p data-ke-size="size16">첫 번째 본문 문장은 짧은 티스토리 글에서도 반드시 남아야 합니다.</p>
+							<p data-ke-size="size16">두 번째 본문 문장은 카테고리나 관련 글보다 우선되어야 합니다.</p>
+							<figure data-ke-type="image">
+								<figcaption>본문 이미지 설명도 보존됩니다.</figcaption>
+							</figure>
+						</div>
+						<div class="another_category">
+							<h4>다른 글 보기</h4>
+							<ul>
+								<li>관련 글 제목 하나</li>
+								<li>관련 글 제목 둘</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+				<footer>구독하기 푸터와 방명록 링크</footer>
+				<script>window.tistoryTracker = true;</script>
+			</body>
+		</html>`;
+}
+
+function newlineFixtureHtml(): string {
+	return `<!doctype html>
+		<html>
+			<body>
+				<div class="article_view">
+					<h1>줄바꿈 보존</h1>
+					<p><span>첫 줄</span><br><span>둘째 줄</span></p>
+					<p><span>새 문단</span> <strong>강조</strong></p>
+					<ul>
+						<li><span>첫 항목</span></li>
+						<li><span>둘째 항목</span></li>
+					</ul>
+					<table>
+						<tr><td>왼쪽 칸</td><td>오른쪽 칸</td></tr>
+					</table>
+				</div>
+			</body>
+		</html>`;
 }
 
 async function waitUntil(assertion: () => void): Promise<void> {
@@ -152,6 +220,53 @@ describe("webfetch", () => {
 		expect(text).not.toContain("window.tracker");
 	});
 
+	it("#given a web page #when fetching markdown #then sends browser navigation headers", async () => {
+		// given
+		let capturedHeaders: CapturedHeaders | undefined;
+		const server = await createFixtureServer((request, response) => {
+			capturedHeaders = request.headers;
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(tistoryFixtureHtml());
+		});
+
+		// when
+		await executeWebfetch({ url: `${server.baseUrl}/headers`, format: "markdown" });
+
+		// then
+		expect(capturedHeaders).toBeDefined();
+		if (!capturedHeaders) throw new Error("Expected captured request headers");
+		expect(headerValue(capturedHeaders, "user-agent")).toContain("Mozilla/5.0");
+		expect(headerValue(capturedHeaders, "accept")).toContain("text/markdown");
+		expect(headerValue(capturedHeaders, "accept-language")).toBe("en-US,en;q=0.9");
+		expect(headerValue(capturedHeaders, "sec-fetch-mode")).toBe("navigate");
+		expect(headerValue(capturedHeaders, "sec-fetch-dest")).toBe("document");
+		expect(headerValue(capturedHeaders, "sec-ch-ua-platform")).toBe('"Windows"');
+	});
+
+	it("#given Tistory article wrappers #when fetching markdown #then prefers the article body over category chrome", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(tistoryFixtureHtml());
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/tistory`, format: "markdown" });
+		const text = textContent(result);
+
+		// then
+		expect(text).toContain("# 티스토리 본문을 읽어야 합니다");
+		expect(text).toContain("첫 번째 본문 문장은");
+		expect(text).toContain("두 번째 본문 문장은");
+		expect(text).toContain("본문 이미지 설명도 보존됩니다");
+		expect(text).not.toContain("관리자 메뉴가 제목을 이기면 안 됨");
+		expect(text).not.toContain("분류 전체보기");
+		expect(text).not.toContain("최근 글");
+		expect(text).not.toContain("관련 글 제목");
+		expect(text).not.toContain("구독하기 푸터");
+		expect(text).not.toContain("tistoryTracker");
+	});
+
 	it("#given html page #when fetching text #then returns readable text without tags", async () => {
 		// given
 		const server = await createFixtureServer((_request, response) => {
@@ -211,6 +326,25 @@ describe("webfetch", () => {
 		expect(text).not.toContain("Text footer legal links");
 		expect(text).not.toContain("textTracker");
 		expect(result.details?.format).toBe("text");
+	});
+
+	it("#given Tistory text with inline spans and blocks #when fetching text #then preserves readable line breaks", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(newlineFixtureHtml());
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/newline`, format: "text" });
+		const text = textContent(result);
+
+		// then
+		expect(text).toContain("줄바꿈 보존\n\n첫 줄\n둘째 줄\n\n새 문단 강조");
+		expect(text).toContain("첫 항목\n\n둘째 항목");
+		expect(text).toContain("왼쪽 칸\n오른쪽 칸");
+		expect(text).not.toContain("\n\n\n");
+		expect(text).not.toContain("첫 줄둘째 줄");
 	});
 
 	it("#given html page #when fetching html #then returns raw html", async () => {
@@ -291,31 +425,53 @@ describe("webfetch", () => {
 		expect(result.details?.truncated).toBe(true);
 	});
 
-	it("#given Cloudflare challenge #when retrying #then closes the challenged response", async () => {
+	it("#given Cloudflare challenge response #when fetching #then does not retry with a bot identity", async () => {
 		// given
-		let challengeClosed = false;
-		let requests = 0;
-		const server = await createFixtureServer((_request, response) => {
-			requests += 1;
-			if (requests === 1) {
-				response.writeHead(403, { "cf-mitigated": "challenge", "content-type": "text/html" });
-				response.write("<h1>challenge</h1>");
-				response.on("close", () => {
-					challengeClosed = true;
+		const attempts: CapturedHeaders[] = [];
+		const server = await createFixtureServer((request, response) => {
+			attempts.push(request.headers);
+			if (attempts.length === 1) {
+				response.writeHead(403, {
+					"cf-mitigated": "challenge",
+					"content-type": "text/html; charset=utf-8",
 				});
+				response.end("<html><body>challenge</body></html>");
 				return;
 			}
 
-			response.writeHead(200, { "content-type": "text/plain" });
+			response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
 			response.end("retried");
 		});
 
 		// when
-		const result = await executeWebfetch({ url: `${server.baseUrl}/challenge`, format: "text" });
+		await executeWebfetch({ url: `${server.baseUrl}/challenge`, format: "text" });
 
 		// then
-		expect(textContent(result)).toBe("retried");
-		expect(requests).toBe(2);
-		expect(challengeClosed).toBe(true);
+		expect(attempts).toHaveLength(1);
+		const challengeHeaders = attempts[0];
+		if (!challengeHeaders) throw new Error("Expected challenge request headers");
+		expect(headerValue(challengeHeaders, "user-agent")).toContain("Mozilla/5.0");
+		expect(headerValue(challengeHeaders, "user-agent")).not.toContain("pi-webfetch");
+		expect(headerValue(challengeHeaders, "sec-fetch-mode")).toBe("navigate");
+		expect(headerValue(challengeHeaders, "sec-fetch-dest")).toBe("document");
+		expect(headerValue(challengeHeaders, "sec-ch-ua-platform")).toBe('"Windows"');
+	});
+
+	it("#given too many redirects #when fetching #then returns the final redirect response body", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(302, {
+				location: "/loop",
+				"content-type": "text/plain; charset=utf-8",
+			});
+			response.end("redirect limit reached");
+		});
+
+		// when
+		const result = await executeWebfetch({ url: `${server.baseUrl}/loop`, format: "text" });
+		const text = textContent(result);
+
+		// then
+		expect(text).toContain("redirect limit reached");
 	});
 });

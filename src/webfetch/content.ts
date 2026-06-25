@@ -12,9 +12,48 @@ const TAGS_TO_REMOVE = /<(script|style|noscript|iframe|object|embed|meta|link)\b
 const VOID_TAGS_TO_REMOVE = /<(script|style|noscript|iframe|object|embed|meta|link)\b[^>]*\/?>/gi;
 const BLOCK_BREAK_TAGS =
 	/<\/?(address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)\b[^>]*>/gi;
+const BLOCK_BREAK_SELECTOR =
+	"address, article, aside, blockquote, dd, div, dl, dt, figcaption, figure, footer, h1, h2, h3, h4, h5, h6, header, hr, li, main, nav, ol, p, pre, section, table, tbody, tfoot, thead, tr, ul";
+const CELL_BREAK_SELECTOR = "td, th";
 const TAGS = /<[^>]+>/g;
-const WHITESPACE = /[\t\f\v ]+/g;
+const WHITESPACE = /[\t\f\v \u00a0]+/g;
 const NEWLINE_RUN = /\n{3,}/g;
+const MIN_EXPLICIT_ARTICLE_TEXT_LENGTH = 30;
+const EXPLICIT_ARTICLE_SELECTORS = [
+	".article_view",
+	".tt_article_useless_p_margin",
+	".entry-content",
+	".contents_style",
+	".post-content",
+	".article-content",
+	".content-article",
+	"#content .contents_style",
+];
+const ARTICLE_NOISE_SELECTOR = [
+	"script",
+	"style",
+	"noscript",
+	"iframe",
+	"object",
+	"embed",
+	"meta",
+	"link",
+	"nav",
+	"aside",
+	"footer",
+	".another_category",
+	".area_related",
+	".related",
+	".revenue_unit_wrap",
+	".adsbygoogle",
+	".container_postbtn",
+	".postbtn_like",
+	".comments",
+	".comment",
+	".tagTrail",
+	".sidebar",
+].join(", ");
+const TITLE_SELECTOR = "h1, .tit_post, .entry-title, .post-title, .article-title";
 
 const ENTITIES: Readonly<Record<string, string>> = {
 	amp: "&",
@@ -36,9 +75,9 @@ turndownService.remove(["script", "style", "noscript", "iframe", "object", "embe
 
 export function htmlToMarkdown(html: string, url: string): string {
 	const article = extractReadableArticle(html, url);
-	if (!article) return turndownService.turndown(html).trim();
+	if (!article) return normalizeMarkdown(turndownService.turndown(html));
 
-	const markdown = turndownService.turndown(article.content).trim();
+	const markdown = normalizeMarkdown(turndownService.turndown(article.content));
 	if (!article.title || article.hasHeading || markdown.startsWith(`# ${article.title}`)) return markdown;
 	return `# ${article.title}\n\n${markdown}`.trim();
 }
@@ -56,6 +95,40 @@ export function htmlToText(html: string, url: string): string {
 }
 
 function htmlFragmentToPlainText(html: string): string {
+	try {
+		const dom = new JSDOM(`<body>${html}</body>`, {
+			contentType: "text/html",
+			virtualConsole: new VirtualConsole(),
+		});
+		try {
+			const document = dom.window.document;
+			for (const element of document.querySelectorAll(
+				"script, style, noscript, iframe, object, embed, meta, link",
+			)) {
+				element.remove();
+			}
+			for (const element of document.querySelectorAll("br")) {
+				element.replaceWith(document.createTextNode("\n"));
+			}
+			for (const element of document.querySelectorAll(CELL_BREAK_SELECTOR)) {
+				element.after(document.createTextNode("\n"));
+			}
+			for (const element of document.querySelectorAll(BLOCK_BREAK_SELECTOR)) {
+				element.before(document.createTextNode("\n"));
+				element.after(document.createTextNode("\n"));
+			}
+			return normalizePlainText(document.body.textContent ?? "");
+		} finally {
+			dom.window.close();
+		}
+	} catch (error) {
+		if (!(error instanceof Error)) throw error;
+	}
+
+	return htmlFragmentToPlainTextFallback(html);
+}
+
+function htmlFragmentToPlainTextFallback(html: string): string {
 	return decodeHtmlEntities(
 		html
 			.replace(TAGS_TO_REMOVE, "")
@@ -78,13 +151,38 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 			virtualConsole: new VirtualConsole(),
 		});
 		try {
+			let explicitArticle: ReadableArticle | undefined;
+			for (const selector of EXPLICIT_ARTICLE_SELECTORS) {
+				const candidate = dom.window.document.querySelector(selector);
+				if (!candidate) continue;
+				const clonedNode = candidate.cloneNode(true);
+				if (!(clonedNode instanceof dom.window.Element)) continue;
+				for (const noisyElement of clonedNode.querySelectorAll(ARTICLE_NOISE_SELECTOR)) {
+					noisyElement.remove();
+				}
+				const text = normalizePlainText(clonedNode.textContent ?? "");
+				if (text.length < MIN_EXPLICIT_ARTICLE_TEXT_LENGTH) continue;
+				const title = normalizePlainText(
+					dom.window.document.querySelector(TITLE_SELECTOR)?.textContent ?? dom.window.document.title,
+				);
+				explicitArticle = {
+					title,
+					content: clonedNode.innerHTML,
+					hasHeading: /<h[1-6]\b/i.test(clonedNode.innerHTML),
+				};
+				break;
+			}
+
 			const article = new Readability(dom.window.document, {
 				charThreshold: 80,
 				keepClasses: false,
 			}).parse();
+			if (explicitArticle) return explicitArticle;
 			if (!article?.content || !article.textContent) return undefined;
 			return {
-				title: normalizePlainText(article.title ?? ""),
+				title: normalizePlainText(
+					dom.window.document.querySelector(TITLE_SELECTOR)?.textContent ?? article.title ?? "",
+				),
 				content: article.content,
 				hasHeading: /<h[1-6]\b/i.test(article.content),
 			};
@@ -101,6 +199,17 @@ function normalizePlainText(text: string): string {
 	return decodeHtmlEntities(
 		text
 			.replace(WHITESPACE, " ")
+			.replace(/[ \t]+\n/g, "\n")
+			.replace(/\n[ \t]+/g, "\n")
+			.replace(NEWLINE_RUN, "\n\n")
+			.trim(),
+	);
+}
+
+function normalizeMarkdown(markdown: string): string {
+	return decodeHtmlEntities(
+		markdown
+			.replace(/\r\n?/g, "\n")
 			.replace(/[ \t]+\n/g, "\n")
 			.replace(/\n[ \t]+/g, "\n")
 			.replace(NEWLINE_RUN, "\n\n")
