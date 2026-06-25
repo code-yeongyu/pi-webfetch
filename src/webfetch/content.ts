@@ -130,16 +130,13 @@ function htmlFragmentToPlainText(html: string): string {
 
 function htmlFragmentToPlainTextFallback(html: string): string {
 	return decodeHtmlEntities(
-		html
-			.replace(TAGS_TO_REMOVE, "")
-			.replace(VOID_TAGS_TO_REMOVE, "")
-			.replace(BLOCK_BREAK_TAGS, "\n")
-			.replace(TAGS, "")
-			.replace(WHITESPACE, " ")
-			.replace(/[ \t]+\n/g, "\n")
-			.replace(/\n[ \t]+/g, "\n")
-			.replace(NEWLINE_RUN, "\n\n")
-			.trim(),
+		normalizePlainText(
+			html
+				.replace(TAGS_TO_REMOVE, "")
+				.replace(VOID_TAGS_TO_REMOVE, "")
+				.replace(BLOCK_BREAK_TAGS, "\n")
+				.replace(TAGS, ""),
+		),
 	);
 }
 
@@ -196,25 +193,21 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 }
 
 function normalizePlainText(text: string): string {
-	return decodeHtmlEntities(
-		text
-			.replace(WHITESPACE, " ")
-			.replace(/[ \t]+\n/g, "\n")
-			.replace(/\n[ \t]+/g, "\n")
-			.replace(NEWLINE_RUN, "\n\n")
-			.trim(),
-	);
+	return text
+		.replace(WHITESPACE, " ")
+		.replace(/[ \t]+\n/g, "\n")
+		.replace(/\n[ \t]+/g, "\n")
+		.replace(NEWLINE_RUN, "\n\n")
+		.trim();
 }
 
 function normalizeMarkdown(markdown: string): string {
-	return decodeHtmlEntities(
-		markdown
-			.replace(/\r\n?/g, "\n")
-			.replace(/[ \t]+\n/g, "\n")
-			.replace(/\n[ \t]+/g, "\n")
-			.replace(NEWLINE_RUN, "\n\n")
-			.trim(),
-	);
+	return markdown
+		.replace(/\r\n?/g, "\n")
+		.replace(/[ \t]+\n/g, "\n")
+		.replace(/\n[ \t]+/g, "\n")
+		.replace(NEWLINE_RUN, "\n\n")
+		.trim();
 }
 
 export function decodeHtmlEntities(text: string): string {

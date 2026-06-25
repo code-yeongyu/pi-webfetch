@@ -110,6 +110,19 @@ function newlineFixtureHtml(): string {
 		</html>`;
 }
 
+function literalEntityFixtureHtml(): string {
+	return `<!doctype html>
+		<html>
+			<body>
+				<article>
+					<h1>Literal Entity Fixture</h1>
+					<p>Rendered tag example: &amp;lt;custom-element&amp;gt;</p>
+					<p>Escaped ampersand example: AT&amp;amp;T docs</p>
+				</article>
+			</body>
+		</html>`;
+}
+
 async function waitUntil(assertion: () => void): Promise<void> {
 	const deadline = Date.now() + 500;
 	let lastError: unknown;
@@ -345,6 +358,30 @@ describe("webfetch", () => {
 		expect(text).toContain("왼쪽 칸\n오른쪽 칸");
 		expect(text).not.toContain("\n\n\n");
 		expect(text).not.toContain("첫 줄둘째 줄");
+	});
+
+	it("#given literal HTML entity examples #when fetching markdown and text #then preserves one decoded layer only", async () => {
+		// given
+		const server = await createFixtureServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end(literalEntityFixtureHtml());
+		});
+
+		// when
+		const markdown = textContent(
+			await executeWebfetch({ url: `${server.baseUrl}/literal-entity`, format: "markdown" }),
+		);
+		const text = textContent(await executeWebfetch({ url: `${server.baseUrl}/literal-entity`, format: "text" }));
+
+		// then
+		expect(markdown).toContain("&lt;custom-element&gt;");
+		expect(markdown).toContain("AT&amp;T docs");
+		expect(markdown).not.toContain("<custom-element>");
+		expect(markdown).not.toContain("AT&T docs");
+		expect(text).toContain("&lt;custom-element&gt;");
+		expect(text).toContain("AT&amp;T docs");
+		expect(text).not.toContain("<custom-element>");
+		expect(text).not.toContain("AT&T docs");
 	});
 
 	it("#given html page #when fetching html #then returns raw html", async () => {
