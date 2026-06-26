@@ -29,6 +29,7 @@ const EXPLICIT_ARTICLE_SELECTORS = [
 	".content-article",
 	"#content .contents_style",
 ];
+const TITLE_SELECTORS = [".tit_post", ".entry-title", ".post-title", ".article-title", "h1"];
 const ARTICLE_NOISE_SELECTOR = [
 	"script",
 	"style",
@@ -53,8 +54,6 @@ const ARTICLE_NOISE_SELECTOR = [
 	".tagTrail",
 	".sidebar",
 ].join(", ");
-const TITLE_SELECTOR = "h1, .tit_post, .entry-title, .post-title, .article-title";
-
 const ENTITIES: Readonly<Record<string, string>> = {
 	amp: "&",
 	apos: "'",
@@ -159,11 +158,8 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 				}
 				const text = normalizePlainText(clonedNode.textContent ?? "");
 				if (text.length < MIN_EXPLICIT_ARTICLE_TEXT_LENGTH) continue;
-				const title = normalizePlainText(
-					dom.window.document.querySelector(TITLE_SELECTOR)?.textContent ?? dom.window.document.title,
-				);
 				explicitArticle = {
-					title,
+					title: selectPreferredTitle(dom.window.document, dom.window.document.title),
 					content: clonedNode.innerHTML,
 					hasHeading: /<h[1-6]\b/i.test(clonedNode.innerHTML),
 				};
@@ -177,9 +173,7 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 			}).parse();
 			if (!article?.content || !article.textContent) return undefined;
 			return {
-				title: normalizePlainText(
-					dom.window.document.querySelector(TITLE_SELECTOR)?.textContent ?? article.title ?? "",
-				),
+				title: selectPreferredTitle(dom.window.document, article.title ?? ""),
 				content: article.content,
 				hasHeading: /<h[1-6]\b/i.test(article.content),
 			};
@@ -190,6 +184,14 @@ function extractReadableArticle(html: string, url: string): ReadableArticle | un
 		if (error instanceof Error) return undefined;
 		throw error;
 	}
+}
+
+function selectPreferredTitle(document: Document, fallback: string): string {
+	for (const selector of TITLE_SELECTORS) {
+		const title = normalizePlainText(document.querySelector(selector)?.textContent ?? "");
+		if (title) return title;
+	}
+	return normalizePlainText(fallback);
 }
 
 function normalizePlainText(text: string): string {
