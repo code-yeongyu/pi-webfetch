@@ -29,7 +29,7 @@ async function executeWebfetch(params: WebfetchParams) {
 
 function textContent(result: Awaited<ReturnType<typeof executeWebfetch>>): string {
 	const first = result.content[0];
-	if (!first || first.type !== "text") {
+	if (first?.type !== "text") {
 		throw new Error("Expected text content");
 	}
 	return first.text;

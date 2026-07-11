@@ -1,5 +1,5 @@
-import { StringEnum } from "@mariozechner/pi-ai";
-import { defineTool } from "@mariozechner/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { htmlToMarkdown, htmlToText } from "./content.js";

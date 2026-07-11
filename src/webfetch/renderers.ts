@@ -1,5 +1,5 @@
-import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";
-import { Text, truncateToWidth } from "@mariozechner/pi-tui";
+import type { Theme, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
+import { Text, truncateToWidth } from "@earendil-works/pi-tui";
 
 import type { WebfetchDetails, WebfetchProgressDetails, WebfetchRenderDetails } from "./tool.js";
 
