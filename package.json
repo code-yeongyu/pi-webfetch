@@ -1,6 +1,6 @@
 {
 	"name": "pi-webfetch",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Web fetch tool extension for the pi coding agent. Fetches URL content as markdown, plain text, or HTML with bounded time and size controls.",
 	"type": "module",
 	"license": "MIT",
