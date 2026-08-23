@@ -46,8 +46,9 @@ interface HttpResponse {
 }
 
 interface ResponseBodyStream extends AsyncIterable<unknown> {
+	on?(event: "error", listener: (error: Error) => void): unknown;
 	destroy(error?: Error): void;
-	dump(options?: { limit: number; signal?: AbortSignal }): Promise<void>;
+	dump?(options?: { limit: number; signal?: AbortSignal }): Promise<void>;
 }
 
 export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
@@ -208,15 +209,29 @@ function getHeader(headers: IncomingHttpHeaders, name: string): string {
 	return value ?? "";
 }
 
-async function discardBody(body: ResponseBodyStream): Promise<void> {
+// Some runtimes resolve "undici" to builds whose response body lacks dump().
+// Discarding must stay best-effort: re-emitting an error on an unlistened
+// stream crashes the host process.
+export async function discardBody(body: ResponseBodyStream): Promise<void> {
 	try {
-		await body.dump({ limit: 1024 });
-	} catch (error) {
-		if (error instanceof Error) {
-			body.destroy(error);
+		if (typeof body.dump === "function") {
+			await body.dump({ limit: 1024 });
 			return;
 		}
-		throw error;
+		await drainBody(body);
+	} catch {
+		// Discard failures are not actionable for the caller.
+	} finally {
+		body.on?.("error", () => {});
+		body.destroy();
+	}
+}
+
+async function drainBody(body: ResponseBodyStream): Promise<void> {
+	let drained = 0;
+	for await (const chunk of body) {
+		drained += toUint8Array(chunk).length;
+		if (drained > MAX_RESPONSE_SIZE_BYTES) return;
 	}
 }
 
