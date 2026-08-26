@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+let readabilityParseCalls = 0;
+
 vi.mock("@mozilla/readability", () => ({
 	Readability: class {
 		parse(): unknown {
-			throw new Error("Readability should not run for explicit article matches");
+			readabilityParseCalls += 1;
+			return null;
 		}
 	},
 }));
@@ -30,5 +33,6 @@ describe("webfetch explicit article extraction", () => {
 		// then
 		expect(markdown).toContain("# Explicit Article");
 		expect(markdown).toContain("Explicit article body");
+		expect(readabilityParseCalls).toBe(0);
 	});
 });
