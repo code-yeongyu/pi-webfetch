@@ -47,7 +47,8 @@ interface HttpResponse {
 
 interface ResponseBodyStream extends AsyncIterable<unknown> {
 	destroy(error?: Error): void;
-	dump(options?: { limit: number; signal?: AbortSignal }): Promise<void>;
+	dump?(options?: { limit: number; signal?: AbortSignal }): Promise<void>;
+	once(event: "error", listener: (error: Error) => void): unknown;
 }
 
 export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
@@ -209,15 +210,26 @@ function getHeader(headers: IncomingHttpHeaders, name: string): string {
 }
 
 async function discardBody(body: ResponseBodyStream): Promise<void> {
+	if (typeof body.dump !== "function") {
+		destroyDiscardedBody(body);
+		return;
+	}
+
 	try {
 		await body.dump({ limit: 1024 });
 	} catch (error) {
 		if (error instanceof Error) {
-			body.destroy(error);
+			destroyDiscardedBody(body);
 			return;
 		}
 		throw error;
 	}
+}
+
+function destroyDiscardedBody(body: ResponseBodyStream): void {
+	// Deliberate teardown can emit an error after the body no longer has a consumer.
+	body.once("error", () => undefined);
+	body.destroy();
 }
 
 async function readResponseBody(response: HttpResponse, signal: AbortSignal): Promise<Uint8Array> {
