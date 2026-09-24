@@ -12,16 +12,17 @@ Conventions for human contributors and AI agents working on this repository.
 
 ## Commands
 
-- `npm install` — install dependencies.
-- `npm test` — run vitest test suite once.
-- `npm run typecheck` — strict TypeScript check (no emit).
-- `npm run check` — type check + biome.
+- `bun install` — install dependencies (preferred for development).
+- `npm install` / `npm ci` — supported consumer install paths.
+- `bun run test` / `npm test` — run vitest test suite once.
+- `bun run typecheck` — strict TypeScript check (no emit).
+- `bun run check` — type check + biome.
 - `pi -e ./src/index.ts` — load the extension into a local pi session for manual smoke testing.
 
 ## Constraints
 
-- No Bun APIs. Runtime is Node only.
-- No dependency on pi-coding-agent internal modules outside the documented public extension API in `@mariozechner/pi-coding-agent`.
+- No Bun APIs. Runtime is Node only. Bun is used as the development/CI toolchain, not as a runtime API.
+- No dependency on pi-coding-agent internal modules outside the documented public extension API in `@earendil-works/pi-coding-agent`.
 - Keep network behavior bounded: abort-aware fetches, timeout cap, and response size cap.
 - Tool renderers read typed `details` returned by `execute`; renderers must not parse formatted strings.
 

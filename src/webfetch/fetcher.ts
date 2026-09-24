@@ -46,9 +46,10 @@ interface HttpResponse {
 }
 
 interface ResponseBodyStream extends AsyncIterable<unknown> {
+	on?(event: "error", listener: (error: Error) => void): unknown;
+	once?(event: "error", listener: (error: Error) => void): unknown;
 	destroy(error?: Error): void;
 	dump?(options?: { limit: number; signal?: AbortSignal }): Promise<void>;
-	once(event: "error", listener: (error: Error) => void): unknown;
 }
 
 export async function fetchUrl(options: FetchOptions): Promise<FetchResult> {
@@ -174,7 +175,7 @@ async function requestUrl(options: RequestUrlOptions): Promise<HttpResponse> {
 			};
 		}
 
-		await discardBody(response.body);
+		await discardBody(response.body, options.signal);
 		currentUrl = new URL(location, currentUrl).toString();
 	}
 
@@ -182,7 +183,7 @@ async function requestUrl(options: RequestUrlOptions): Promise<HttpResponse> {
 }
 
 async function readHttpResponse(response: HttpResponse, signal: AbortSignal): Promise<FetchResult> {
-	await rejectOversizedContentLength(response);
+	await rejectOversizedContentLength(response, signal);
 	const body = await readResponseBody(response, signal);
 	return {
 		url: response.url,
@@ -195,10 +196,10 @@ async function readHttpResponse(response: HttpResponse, signal: AbortSignal): Pr
 	};
 }
 
-async function rejectOversizedContentLength(response: HttpResponse): Promise<void> {
+async function rejectOversizedContentLength(response: HttpResponse, signal: AbortSignal): Promise<void> {
 	const contentLength = getHeader(response.headers, "content-length");
 	if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_SIZE_BYTES) {
-		await discardBody(response.body);
+		await discardBody(response.body, signal);
 		throw new WebfetchResponseTooLargeError("Response too large (exceeds 5MB limit)");
 	}
 }
@@ -209,27 +210,54 @@ function getHeader(headers: IncomingHttpHeaders, name: string): string {
 	return value ?? "";
 }
 
-async function discardBody(body: ResponseBodyStream): Promise<void> {
-	if (typeof body.dump !== "function") {
-		destroyDiscardedBody(body);
-		return;
-	}
-
+// Some runtimes resolve undici to builds whose response body lacks dump().
+// Discarding must stay best-effort: re-emitting an error on an unlistened
+// stream crashes the host process.
+export async function discardBody(body: ResponseBodyStream, signal?: AbortSignal): Promise<void> {
+	body.on?.("error", () => {});
+	body.once?.("error", () => {});
 	try {
-		await body.dump({ limit: 1024 });
-	} catch (error) {
-		if (error instanceof Error) {
-			destroyDiscardedBody(body);
+		if (typeof body.dump === "function") {
+			await body.dump(signal ? { limit: 1024, signal } : { limit: 1024 });
 			return;
 		}
-		throw error;
+		await drainBody(body, signal);
+	} catch {
+		// Discard failures are not actionable for the caller.
+	} finally {
+		body.destroy();
 	}
 }
 
-function destroyDiscardedBody(body: ResponseBodyStream): void {
-	// Deliberate teardown can emit an error after the body no longer has a consumer.
-	body.once("error", () => undefined);
-	body.destroy();
+async function drainBody(body: ResponseBodyStream, signal?: AbortSignal): Promise<void> {
+	let drained = 0;
+	const iterator = body[Symbol.asyncIterator]();
+	while (true) {
+		const result = await nextDiscardChunk(iterator, signal);
+		if (!result || result.done) return;
+		drained += toUint8Array(result.value).length;
+		if (drained > MAX_RESPONSE_SIZE_BYTES) return;
+	}
+}
+
+async function nextDiscardChunk(
+	iterator: AsyncIterator<unknown>,
+	signal?: AbortSignal,
+): Promise<IteratorResult<unknown> | undefined> {
+	if (!signal) return iterator.next();
+	if (signal.aborted) return undefined;
+
+	let resolveAbort: () => void = () => {};
+	const aborted = new Promise<undefined>((resolve) => {
+		resolveAbort = () => resolve(undefined);
+	});
+	const onAbort = (): void => resolveAbort();
+	signal.addEventListener("abort", onAbort, { once: true });
+	try {
+		return await Promise.race([iterator.next(), aborted]);
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+	}
 }
 
 async function readResponseBody(response: HttpResponse, signal: AbortSignal): Promise<Uint8Array> {
