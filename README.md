@@ -37,7 +37,7 @@ pi install npm:@code-yeongyu/pi-webfetch
 # 2. From git
 pi install git:github.com/code-yeongyu/pi-webfetch
 
-# 3. Manual placement
+# 3. Manual placement (npm consumer install)
 git clone https://github.com/code-yeongyu/pi-webfetch ~/.pi/agent/extensions/pi-webfetch
 cd ~/.pi/agent/extensions/pi-webfetch && npm install
 
@@ -74,14 +74,14 @@ HTML responses are converted when `format` is `markdown` or `text`. Non-HTML res
 ```bash
 git clone https://github.com/code-yeongyu/pi-webfetch
 cd pi-webfetch
-npm install
-npm test
-npm run typecheck
-npm run check
+bun install
+bun run test
+bun run typecheck
+bun run check
 pi -e ./src/index.ts
 ```
 
-The test suite uses vitest. Test descriptions follow `#given .. #when .. #then` style; bodies use plain `// given / // when / // then` comments. TypeScript is strict, Node-only, and uses ESM imports with `.js` suffixes.
+npm remains a supported consumer install (`npm install` / `npm ci` / `npm test`). The test suite uses vitest. Test descriptions follow `#given .. #when .. #then` style; bodies use plain `// given / // when / // then` comments. TypeScript is strict, Node-only, and uses ESM imports with `.js` suffixes.
 
 ## License
 

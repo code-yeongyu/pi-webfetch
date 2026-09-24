@@ -9,29 +9,21 @@ describe("webfetch extension toggle", () => {
 		expect(isWebfetchEnabled()).toBe(true);
 	});
 
-	it.each([
-		"1",
-		"true",
-		"yes",
-		"on",
-		" TRUE ",
-		"\tYeS\n",
-	])("returns true for truthy PI_WEBFETCH value %s", (envValue) => {
-		process.env[ENABLE_ENV] = envValue;
-		expect(isWebfetchEnabled()).toBe(true);
-	});
+	it.each(["1", "true", "yes", "on", " TRUE ", "\tYeS\n"])(
+		"returns true for truthy PI_WEBFETCH value %s",
+		(envValue) => {
+			process.env[ENABLE_ENV] = envValue;
+			expect(isWebfetchEnabled()).toBe(true);
+		},
+	);
 
-	it.each([
-		"0",
-		"false",
-		"no",
-		"off",
-		" OFF ",
-		"\nNo\t",
-	])("returns false for falsy PI_WEBFETCH value %s", (envValue) => {
-		process.env[ENABLE_ENV] = envValue;
-		expect(isWebfetchEnabled()).toBe(false);
-	});
+	it.each(["0", "false", "no", "off", " OFF ", "\nNo\t"])(
+		"returns false for falsy PI_WEBFETCH value %s",
+		(envValue) => {
+			process.env[ENABLE_ENV] = envValue;
+			expect(isWebfetchEnabled()).toBe(false);
+		},
+	);
 
 	it("returns true for unknown PI_WEBFETCH values", () => {
 		process.env[ENABLE_ENV] = "definitely";
